@@ -267,3 +267,127 @@ Nginx が受け取って `/var/www/mysite/index.html` を表示！
 
 ---
 
+## 🌀 バーチャルホスト設定による複数サイト運用（mysite.local / blog.local）
+
+---
+
+### ✋ 実行前の注意
+
+| 項目 | 内容 |
+|--|--|
+| 実行環境 | Ubuntu Server 22.04（VirtualBox） |
+| ブラウザ確認 | ポートフォワーディング設定済みで http://mysite.local:8080 / http://blog.local:8080 へアクセス |
+| ネット名解決 | Windows側の `hosts` ファイル編集必須（DNS代用） |
+
+---
+
+### 🛠️ 実践：Nginxで複数サイトを運用する設定
+
+| ステップ | 作業内容 | 詳細・コマンドなど |
+|--|--|--|
+| ① | `mysite.local` の準備 | `/etc/nginx/sites-available/default` を編集:<br>- `root /var/www/mysite`<br>- `server_name mysite.local;` |
+| ② | HTMLファイル作成 | `echo '<h1>Hello MySite</h1>' \| sudo tee /var/www/mysite/index.html` |
+| ③ | `hosts` を編集（Windows側） | `127.0.0.1 mysite.local` を追記 |
+| ④ | `blog.local` 用の設定作成 | `sudo cp default blog.local`<br>編集内容:<br>- `root /var/www/blog`<br>- `server_name blog.local;` |
+| ⑤ | blog用HTML作成 | `echo '<h1>Hello Blog</h1>' \| sudo tee /var/www/blog/index.html` |
+| ⑥ | シンボリックリンク作成 | `sudo ln -s /etc/nginx/sites-available/blog.local /etc/nginx/sites-enabled/` |
+| ⑦ | hostsにblog.local追記（Windows側） | `127.0.0.1 blog.local` を追記 |
+| ⑧ | Nginx設定チェック | `sudo nginx -t` |
+| ⑨ | Nginxを再読み込み | `sudo systemctl reload nginx` |
+| ⑩ | ブラウザで動作確認 | `http://mysite.local:8080` と `http://blog.local:8080` にアクセス<br>→ 各HTMLが表示されれば成功！ |
+
+---
+
+### 🧩 理解ポイントまとめ
+
+| 用語 | 説明 |
+|--|--|
+| `server_name` | サイトにアクセスするための識別名（例：blog.local） |
+| `root` | サイトファイル（index.htmlなど）の配置ディレクトリ |
+| `sites-available` | Nginxの設定ファイル保管場所（本体） |
+| `sites-enabled` | 実際に読み込まれる有効設定（シンボリックリンク） |
+| `hostsファイル` | ローカルDNSのように機能する名前解決テーブル（WindowsでもLinuxでも） |
+
+---
+
+### 🐛 トラブルとその解決メモ
+
+| 問題 | 原因・対策 |
+|--|--|
+| `duplicate default_server` エラー | `listen 80 default_server;` が複数存在 → 重複を削除 or 一方だけに指定 |
+| `server_name ""` 競合 | 明示的に `server_name blog.local;` などを指定し、空白や `_` を避ける |
+| 変更反映されない | `nginx -t` で構文確認後、`sudo systemctl reload nginx` を忘れずに |
+
+---
+
+```bash
+# 最小構成の blog.local の例
+server {
+    listen 80;
+    server_name blog.local;
+
+    root /var/www/blog;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+```
+
+---
+
+#　少し重複します
+
+## 🖥️ 複数ローカルドメイン設定（Virtual Host 実践）
+
+---
+
+### ✅ 今回の目的
+
+- 複数のローカルドメイン（例: `mysite.local`, `blog.local`）で別々のHTMLサイトを表示できるようにする  
+- `sites-available` / `sites-enabled` によるバーチャルホスト管理を実践的に理解する
+
+---
+
+### 🛠️ 実践パート
+
+| ステップ | 作業内容 | 詳細・コマンドなど |
+|---------|----------|--------------------|
+| ① | `mysite.local` を `/var/www/mysite` に設定 | `default` の `root` を `html` → `mysite` に変更<br>`server_name mysite.local;` を追加 |
+| ② | Windows側 `C:\Windows\System32\drivers\etc\hosts` を編集 | `127.0.0.1 mysite.local` を追記（DNS代わり） |
+| ③ | ブラウザで `http://mysite.local:8080` にアクセス | → `Hello MySite` 表示確認 |
+| ④ | `/etc/nginx/sites-available/blog.local` を新規作成 | `default` をコピーして編集：<br>`server_name blog.local;`<br>`root /var/www/blog;` |
+| ⑤ | `/var/www/blog/index.html` を作成 | `echo '<h1>Hello Blog</h1>' > /var/www/blog/index.html` |
+| ⑥ | `blog.local` の設定を有効化 | `sudo ln -s /etc/nginx/sites-available/blog.local /etc/nginx/sites-enabled/` |
+| ⑦ | Windowsの `hosts` に `blog.local` を追加 | `127.0.0.1 blog.local` を追記 |
+| ⑧ | 設定ファイルの文法チェック | `sudo nginx -t` → OK |
+| ⑨ | Nginxの再読み込み | `sudo systemctl reload nginx` |
+| ⑩ | `http://blog.local:8080` で表示確認 | → `Hello Blog` 表示成功！🎉 |
+
+---
+
+### ⚠️ トラブルと解決ポイント
+
+| 現象 | 原因と対応 |
+|------|------------|
+| `nginx -t` で "duplicate default_server" エラー | `default` 設定ファイルに `default_server` が複数指定されていた → 片方の `listen 80 default_server;` を削除 |
+| `server_name` の競合エラー | `server_name _;`（アンダースコア）や空白指定の重複があると競合扱いされる<br>→ 重複しない明確な名前（例：`mysite.local`, `blog.local`）に修正 |
+| 設定ファイルが複雑すぎた | `sites-available/blog.local` に最低限の `server { ... }` だけ残し、不要なコメントやダブり設定を削除 |
+
+---
+
+### 🧠 今回で理解したこと（まとめ）
+
+- `root /var/www/...` → 表示するサイトファイルの場所を指すパス
+- `server_name` → アクセス時に使うホスト名（例：`blog.local`）と関連付ける
+- `/etc/hosts` → DNSが無くてもローカルで名前解決できるようにする
+- `/etc/nginx/sites-available/` → Nginxの設定ファイルを置く場所（原本）
+- `/etc/nginx/sites-enabled/` → 有効にした設定をシンボリックリンクでここに置く
+- `sudo nginx -t` → 構文チェック
+- `sudo systemctl reload nginx` → 設定反映（再起動不要）
+
+---
+
+#　重複ここまで
+
