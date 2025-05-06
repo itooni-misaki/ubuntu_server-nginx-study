@@ -172,3 +172,76 @@ Content-Encoding: gzip
 - `403`が出たら `access.log` でIPを確認するクセをつけよう！
 
 ---
+## 🔁 Nginxで301リダイレクトを設定する方法
+
+---
+
+### ✅ 目的
+
+`/old` にアクセスされた場合に `/new` へ恒久的にリダイレクト（301）させる。
+
+---
+
+### 🛠️ 設定手順
+
+#### 🔧 対象ファイル：
+
+```bash
+sudo nano /etc/nginx/sites-enabled/default
+```
+
+#### 🔧 serverブロック内に以下を追加：
+
+```nginx
+server {
+    listen 8080 default_server;
+    listen [::]:8080 default_server;
+
+    server_name localhost;
+
+    # 🔁 リダイレクト設定
+    location /old {
+        return 301 /new;
+    }
+
+    # 🔍 通常ルート（必要に応じて）
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+```
+
+---
+
+### 🔁 動作確認コマンド
+
+```bash
+curl -I http://localhost:8080/old
+```
+
+#### ✅ 期待される出力：
+
+```plaintext
+HTTP/1.1 301 Moved Permanently
+Location: http://localhost:8080/new
+```
+
+---
+
+### 📚 解説メモ
+
+| 項目 | 内容 |
+|------|------|
+| `301` | 恒久的リダイレクト。検索エンジンに新URLとして認識される |
+| `return 301 /new;` | 指定されたパスに即時リダイレクト |
+| `Location`ヘッダ | クライアント側がリダイレクト先を判断するための情報 |
+
+---
+
+### ✨ ポイントまとめ
+
+- `location /old { return 301 /new; }` は**serverブロック内**に記述
+- `server_name` は `server {}` 直下に書くこと（`location` の外）
+- `curl -I` を使うとヘッダだけ取得でき、リダイレクトの確認に最適
+
+---
